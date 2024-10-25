@@ -3,7 +3,7 @@ module github.com/tomcz/openldap_exporter/v2
 go 1.22
 
 require (
-	github.com/go-kit/log v0.2.0
+	github.com/go-kit/log v0.2.1
 	github.com/prometheus/client_golang v1.12.1
 	github.com/prometheus/exporter-toolkit v0.7.3
 	github.com/tomcz/gotools v0.4.3
