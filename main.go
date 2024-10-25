@@ -13,21 +13,18 @@ import (
 	"syscall"
 	"time"
 
-	kitlog "github.com/go-kit/log"
+	ldap "github.com/go-ldap/ldap/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/tomcz/gotools/errgroup"
-	"github.com/tomcz/gotools/maps"
 	"github.com/tomcz/gotools/quiet"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"gopkg.in/ldap.v2"
 )
 
 const (
 	promAddr          = "promAddr"
-	ldapNet           = "ldapNet"
 	ldapAddr          = "ldapAddr"
 	ldapUser          = "ldapUser"
 	ldapPass          = "ldapPass"
@@ -54,12 +51,6 @@ func main() {
 			Value:   "/metrics",
 			Usage:   "Path on which to expose Prometheus metrics",
 			EnvVars: []string{"METRICS_PATH"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    ldapNet,
-			Value:   "tcp",
-			Usage:   "Network of OpenLDAP server",
-			EnvVars: []string{"LDAP_NET"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:    ldapAddr,
@@ -94,7 +85,7 @@ func main() {
 			Usage:   "Prometheus metrics web config `FILE` (optional)",
 			EnvVars: []string{"WEB_CFG_FILE"},
 		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:  replicationObject,
 			Usage: "Object to watch replication upon",
 		}),
@@ -147,12 +138,11 @@ func runMain(c *cli.Context) error {
 	)
 
 	scraper := &Scraper{
-		Net:  c.String(ldapNet),
 		Addr: c.String(ldapAddr),
 		User: c.String(ldapUser),
 		Pass: c.String(ldapPass),
 		Tick: c.Duration(interval),
-		Sync: c.StringSlice(replicationObject),
+		Sync: c.String(replicationObject),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -338,21 +328,19 @@ func setValue(entries []*ldap.Entry, q *query) {
 }
 
 type Scraper struct {
-	Net      string
 	Addr     string
 	User     string
 	Pass     string
 	Tick     time.Duration
 	LdapSync []string
 	log      *log.Logger
-	Sync     []string
+	Sync     string
 }
 
 func (s *Scraper) Start(ctx context.Context) {
 	s.log = log.With("component", "scraper")
 	s.addReplicationQueries()
-	address := fmt.Sprintf("%s://%s", s.Net, s.Addr)
-	s.log.Info("starting monitor loop", "addr", address)
+	s.log.Info("starting monitor loop", "addr", s.Addr)
 	ticker := time.NewTicker(s.Tick)
 	defer ticker.Stop()
 	for {
@@ -366,56 +354,60 @@ func (s *Scraper) Start(ctx context.Context) {
 }
 
 func (s *Scraper) addReplicationQueries() {
-	for _, q := range s.Sync {
+
+	if s.Sync != "" {
 		queries = append(queries,
 			&query{
-				baseDN:       q,
-				searchFilter: objectClass("*"),
+				baseDN:       s.Sync,
+				searchFilter: "(contextCSN=*)",
 				searchAttr:   monitorReplicationFilter,
 				metric:       monitorReplicationGauge,
 				setData:      s.setReplicationValue,
 			},
 		)
 	}
+
 }
 
 func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 	for _, entry := range entries {
-		val := entry.GetAttributeValue(q.searchAttr)
-		if val == "" {
-			// not every entry will have this attribute
-			continue
+		values := entry.GetAttributeValues(q.searchAttr)
+		for _, val := range values {
+			if val == "" {
+				// not every entry will have this attribute
+				continue
+			}
+			ll := s.log.With(
+				"filter", q.searchFilter,
+				"attr", q.searchAttr,
+				"value", val,
+			)
+			valueBuffer := strings.Split(val, "#")
+			gt, err := time.Parse("20060102150405.999999Z", valueBuffer[0])
+			if err != nil {
+				ll.Warn("unexpected gt value", "err", err)
+				continue
+			}
+			count, err := strconv.ParseFloat(valueBuffer[1], 64)
+			if err != nil {
+				ll.Warn("unexpected count value", "err", err)
+				continue
+			}
+			sid := valueBuffer[2]
+			mod, err := strconv.ParseFloat(valueBuffer[3], 64)
+			if err != nil {
+				ll.Warn("unexpected mod value", "err", err)
+				continue
+			}
+			q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
+			q.metric.WithLabelValues(sid, "count").Set(count)
+			q.metric.WithLabelValues(sid, "mod").Set(mod)
 		}
-		ll := s.log.With(
-			"filter", q.searchFilter,
-			"attr", q.searchAttr,
-			"value", val,
-		)
-		valueBuffer := strings.Split(val, "#")
-		gt, err := time.Parse("20060102150405.999999Z", valueBuffer[0])
-		if err != nil {
-			ll.Warn("unexpected gt value", "err", err)
-			continue
-		}
-		count, err := strconv.ParseFloat(valueBuffer[1], 64)
-		if err != nil {
-			ll.Warn("unexpected count value", "err", err)
-			continue
-		}
-		sid := valueBuffer[2]
-		mod, err := strconv.ParseFloat(valueBuffer[3], 64)
-		if err != nil {
-			ll.Warn("unexpected mod value", "err", err)
-			continue
-		}
-		q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
-		q.metric.WithLabelValues(sid, "count").Set(count)
-		q.metric.WithLabelValues(sid, "mod").Set(mod)
 	}
 }
 
 func (s *Scraper) scrape() {
-	conn, err := ldap.Dial(s.Net, s.Addr)
+	conn, err := ldap.DialURL(s.Addr)
 	if err != nil {
 		s.log.Error("dial failed")
 		dialCounter.WithLabelValues("fail").Inc()
@@ -496,7 +488,10 @@ func showVersion(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) Start() error {
 	s.logger.Info("starting http listener", "addr", s.server.Addr)
-	err := web.ListenAndServe(s.server, s.cfgPath, kitlog.LoggerFunc(s.adaptor))
+	err := web.ListenAndServe(s.server, &web.FlagConfig{
+		WebListenAddresses: &[]string{s.server.Addr},
+		WebConfigFile:      &s.cfgPath,
+	}, s.logger)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -505,44 +500,4 @@ func (s *Server) Start() error {
 
 func (s *Server) Stop() {
 	quiet.CloseWithTimeout(s.server.Shutdown, 100*time.Millisecond)
-}
-
-func (s *Server) adaptor(kvs ...interface{}) error {
-	if len(kvs) == 0 {
-		return nil
-	}
-	if len(kvs)%2 != 0 {
-		kvs = append(kvs, nil)
-	}
-	fields := make(map[string]any)
-	for i := 0; i < len(kvs); i += 2 {
-		key := fmt.Sprint(kvs[i])
-		fields[key] = kvs[i+1]
-	}
-	var msg string
-	if val, ok := fields["msg"]; ok {
-		delete(fields, "msg")
-		msg = fmt.Sprint(val)
-	}
-	var level string
-	if val, ok := fields["level"]; ok {
-		delete(fields, "level")
-		level = fmt.Sprint(val)
-	}
-	var args []any
-	for _, e := range maps.SortedEntries(fields) {
-		args = append(args, e.Key, e.Val)
-	}
-	ll := s.logger.With(args...)
-	switch level {
-	case "error":
-		ll.Error(msg)
-	case "warn":
-		ll.Warn(msg)
-	case "debug":
-		ll.Debug(msg)
-	default:
-		ll.Info(msg)
-	}
-	return nil
 }
