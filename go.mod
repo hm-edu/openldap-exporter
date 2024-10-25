@@ -39,4 +39,4 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
 
-replace gopkg.in/asn1-ber.v1 => github.com/go-asn1-ber/asn1-ber v1.5.4
+replace gopkg.in/asn1-ber.v1 => github.com/go-asn1-ber/asn1-ber v1.5.7
