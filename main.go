@@ -432,7 +432,7 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 			q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
 			q.metric.WithLabelValues(sid, "count").Set(count)
 			q.metric.WithLabelValues(sid, "mod").Set(mod)
-			if replica != nil && len(replica) != 0 && s.ServerId == sidNo {
+			if len(replica) != 0 && s.ServerId == sidNo {
 				for _, rep := range replica {
 					delta := gt.Sub(rep.Time).Seconds()
 					monitorReplicationDeltaGauge.WithLabelValues(rep.Server).Set(delta)
