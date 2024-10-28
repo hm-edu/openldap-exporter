@@ -30,7 +30,7 @@ const (
 	ldapPass          = "ldap-pass"
 	interval          = "interval"
 	metrics           = "metrics-path"
-	jsonLog           = "jsonLog"
+	jsonLog           = "json-log"
 	config            = "config"
 	replicationObject = "replication-object"
 	replicationServer = "replication-server"
@@ -487,7 +487,6 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 			dialCounter.WithLabelValues("fail").Inc()
 			continue
 		}
-
 		if s.User != "" && s.Pass != "" {
 			err = replica.Bind(s.User, s.Pass)
 			if err != nil {
@@ -505,6 +504,10 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 		sr, err := replica.Search(req)
 		if err != nil {
 			s.log.Error("query failed", "err", err)
+			err = replica.Close()
+			if err != nil {
+				s.log.Error("close failed", "err", err)
+			}
 			continue
 		}
 		for _, entry := range sr.Entries {
@@ -535,6 +538,10 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 					break
 				}
 			}
+		}
+		err = replica.Close()
+		if err != nil {
+			s.log.Error("close failed", "err", err)
 		}
 	}
 	return replicaStatus
