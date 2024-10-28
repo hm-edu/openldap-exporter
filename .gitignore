@@ -3,3 +3,4 @@
 target/
 openldap-exporter
 .vscode/launch.json
+__debug_bin**

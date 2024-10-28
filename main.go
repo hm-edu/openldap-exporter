@@ -24,16 +24,17 @@ import (
 )
 
 const (
-	promAddr          = "promAddr"
-	ldapAddr          = "ldapAddr"
-	ldapUser          = "ldapUser"
-	ldapPass          = "ldapPass"
+	promAddr          = "prom-addr"
+	ldapAddr          = "ldap-addr"
+	ldapUser          = "ldap-user"
+	ldapPass          = "ldap-pass"
 	interval          = "interval"
-	metrics           = "metrPath"
+	metrics           = "metrics-path"
 	jsonLog           = "jsonLog"
-	webCfgFile        = "webCfgFile"
 	config            = "config"
-	replicationObject = "replicationObject"
+	replicationObject = "replication-object"
+	replicationServer = "replication-server"
+	serverId          = "server-id"
 )
 
 var showStop bool
@@ -81,13 +82,16 @@ func main() {
 			EnvVars: []string{"JSON_LOG"},
 		}),
 		altsrc.NewStringFlag(&cli.StringFlag{
-			Name:    webCfgFile,
-			Usage:   "Prometheus metrics web config `FILE` (optional)",
-			EnvVars: []string{"WEB_CFG_FILE"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:  replicationObject,
 			Usage: "Object to watch replication upon",
+		}),
+		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+			Name:  replicationServer,
+			Usage: "The replication servers to watch",
+		}),
+		altsrc.NewIntFlag(&cli.IntFlag{
+			Name:  serverId,
+			Usage: "The id of the server to watch",
 		}),
 		&cli.StringFlag{
 			Name:  config,
@@ -134,15 +138,16 @@ func runMain(c *cli.Context) error {
 	server := NewMetricsServer(
 		c.String(promAddr),
 		c.String(metrics),
-		c.String(webCfgFile),
 	)
 
 	scraper := &Scraper{
-		Addr: c.String(ldapAddr),
-		User: c.String(ldapUser),
-		Pass: c.String(ldapPass),
-		Tick: c.Duration(interval),
-		Sync: c.String(replicationObject),
+		Addr:              c.String(ldapAddr),
+		User:              c.String(ldapUser),
+		Pass:              c.String(ldapPass),
+		Tick:              c.Duration(interval),
+		Sync:              c.String(replicationObject),
+		ServerId:          c.Int(serverId),
+		ReplicatonServers: c.StringSlice(replicationServer),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -193,6 +198,7 @@ const (
 
 	monitorReplicationFilter = "contextCSN"
 	monitorReplication       = "monitorReplication"
+	monitorReplicationDelta  = "monitorReplicationDelta"
 )
 
 type query struct {
@@ -260,6 +266,14 @@ var (
 		},
 		[]string{"id", "type"},
 	)
+	monitorReplicationDeltaGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "openldap",
+			Name:      "replication_delta",
+			Help:      help(baseDN, monitorReplicationDelta),
+		},
+		[]string{"replica"},
+	)
 	queries = []*query{
 		{
 			baseDN:       baseDN,
@@ -297,6 +311,7 @@ func init() {
 		monitorCounterObjectGauge,
 		monitorOperationGauge,
 		monitorReplicationGauge,
+		monitorReplicationDeltaGauge,
 		scrapeCounter,
 		bindCounter,
 		dialCounter,
@@ -328,13 +343,14 @@ func setValue(entries []*ldap.Entry, q *query) {
 }
 
 type Scraper struct {
-	Addr     string
-	User     string
-	Pass     string
-	Tick     time.Duration
-	LdapSync []string
-	log      *log.Logger
-	Sync     string
+	Addr              string
+	User              string
+	Pass              string
+	Tick              time.Duration
+	log               *log.Logger
+	Sync              string
+	ServerId          int
+	ReplicatonServers []string
 }
 
 func (s *Scraper) Start(ctx context.Context) {
@@ -343,6 +359,7 @@ func (s *Scraper) Start(ctx context.Context) {
 	s.log.Info("starting monitor loop", "addr", s.Addr)
 	ticker := time.NewTicker(s.Tick)
 	defer ticker.Stop()
+	s.scrape()
 	for {
 		select {
 		case <-ticker.C:
@@ -370,6 +387,12 @@ func (s *Scraper) addReplicationQueries() {
 }
 
 func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
+
+	var replica []ReplicaStatus
+	if len(s.ReplicatonServers) != 0 {
+		replicaResult := s.scrapeReplication()
+		replica = replicaResult
+	}
 	for _, entry := range entries {
 		values := entry.GetAttributeValues(q.searchAttr)
 		for _, val := range values {
@@ -394,6 +417,13 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 				continue
 			}
 			sid := valueBuffer[2]
+
+			sidNo, err := strconv.Atoi(valueBuffer[2])
+			if err != nil {
+				ll.Warn("unexpected sid value", "err", err)
+				continue
+			}
+
 			mod, err := strconv.ParseFloat(valueBuffer[3], 64)
 			if err != nil {
 				ll.Warn("unexpected mod value", "err", err)
@@ -402,6 +432,12 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 			q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
 			q.metric.WithLabelValues(sid, "count").Set(count)
 			q.metric.WithLabelValues(sid, "mod").Set(mod)
+			if replica != nil && len(replica) != 0 && s.ServerId == sidNo {
+				for _, rep := range replica {
+					delta := gt.Sub(rep.Time).Seconds()
+					monitorReplicationDeltaGauge.WithLabelValues(rep.Server).Set(delta)
+				}
+			}
 		}
 	}
 }
@@ -436,6 +472,74 @@ func (s *Scraper) scrape() {
 	scrapeCounter.WithLabelValues(scrapeRes).Inc()
 }
 
+type ReplicaStatus struct {
+	Time   time.Time
+	Server string
+}
+
+func (s *Scraper) scrapeReplication() []ReplicaStatus {
+
+	var replicaStatus []ReplicaStatus
+	for _, server := range s.ReplicatonServers {
+		replica, err := ldap.DialURL(server)
+		if err != nil {
+			s.log.Error("dial failed")
+			dialCounter.WithLabelValues("fail").Inc()
+			continue
+		}
+
+		if s.User != "" && s.Pass != "" {
+			err = replica.Bind(s.User, s.Pass)
+			if err != nil {
+				s.log.Error("bind failed", "err", err)
+				bindCounter.WithLabelValues("fail").Inc()
+				continue
+			}
+			bindCounter.WithLabelValues("ok").Inc()
+		}
+
+		req := ldap.NewSearchRequest(
+			s.Sync, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+			"(contextCSN=*)", []string{monitorReplicationFilter}, nil,
+		)
+		sr, err := replica.Search(req)
+		if err != nil {
+			s.log.Error("query failed", "err", err)
+			continue
+		}
+		for _, entry := range sr.Entries {
+			values := entry.GetAttributeValues(monitorReplicationFilter)
+			for _, val := range values {
+				if val == "" {
+					// not every entry will have this attribute
+					continue
+				}
+				ll := s.log.With(
+					"filter", monitorReplicationFilter,
+					"attr", monitorReplicationFilter,
+					"value", val,
+				)
+				valueBuffer := strings.Split(val, "#")
+				gt, err := time.Parse("20060102150405.999999Z", valueBuffer[0])
+				if err != nil {
+					ll.Warn("unexpected gt value", "err", err)
+					continue
+				}
+				sid, err := strconv.Atoi(valueBuffer[2])
+				if err != nil {
+					ll.Warn("unexpected sid value", "err", err)
+					continue
+				}
+				if sid == s.ServerId {
+					replicaStatus = append(replicaStatus, ReplicaStatus{Time: gt, Server: server})
+					break
+				}
+			}
+		}
+	}
+	return replicaStatus
+}
+
 func scrapeQuery(conn *ldap.Conn, q *query) error {
 	req := ldap.NewSearchRequest(
 		q.baseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
@@ -461,19 +565,17 @@ func GetVersion() string {
 }
 
 type Server struct {
-	server  *http.Server
-	logger  *log.Logger
-	cfgPath string
+	server *http.Server
+	logger *log.Logger
 }
 
-func NewMetricsServer(bindAddr, metricsPath, tlsConfigPath string) *Server {
+func NewMetricsServer(bindAddr, metricsPath string) *Server {
 	mux := http.NewServeMux()
 	mux.Handle(metricsPath, promhttp.Handler())
 	mux.HandleFunc("/version", showVersion)
 	return &Server{
-		server:  &http.Server{Addr: bindAddr, Handler: mux},
-		logger:  log.With("component", "server"),
-		cfgPath: tlsConfigPath,
+		server: &http.Server{Addr: bindAddr, Handler: mux},
+		logger: log.With("component", "server"),
 	}
 }
 
@@ -488,9 +590,10 @@ func showVersion(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) Start() error {
 	s.logger.Info("starting http listener", "addr", s.server.Addr)
+	cfg := ""
 	err := web.ListenAndServe(s.server, &web.FlagConfig{
 		WebListenAddresses: &[]string{s.server.Addr},
-		WebConfigFile:      &s.cfgPath,
+		WebConfigFile:      &cfg,
 	}, s.logger)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
