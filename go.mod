@@ -5,7 +5,7 @@ go 1.22
 require (
 	github.com/go-ldap/ldap/v3 v3.4.8
 	github.com/prometheus/client_golang v1.20.5
-	github.com/prometheus/exporter-toolkit v0.13.0
+	github.com/prometheus/exporter-toolkit v0.13.1
 	github.com/tomcz/gotools v0.8.2
 	github.com/urfave/cli/v2 v2.27.5
 )
