@@ -203,6 +203,7 @@ const (
 
 type query struct {
 	baseDN       string
+	scope        int
 	searchFilter string
 	searchAttr   string
 	metric       *prometheus.GaugeVec
@@ -277,12 +278,14 @@ var (
 	queries = []*query{
 		{
 			baseDN:       baseDN,
+			scope:        ldap.ScopeWholeSubtree,
 			searchFilter: objectClass(monitoredObject),
 			searchAttr:   monitoredInfo,
 			metric:       monitoredObjectGauge,
 			setData:      setValue,
 		}, {
 			baseDN:       baseDN,
+			scope:        ldap.ScopeWholeSubtree,
 			searchFilter: objectClass(monitorCounterObject),
 			searchAttr:   monitorCounter,
 			metric:       monitorCounterObjectGauge,
@@ -290,6 +293,7 @@ var (
 		},
 		{
 			baseDN:       opsBaseDN,
+			scope:        ldap.ScopeWholeSubtree,
 			searchFilter: objectClass(monitorOperation),
 			searchAttr:   monitorOpCompleted,
 			metric:       monitorOperationGauge,
@@ -297,6 +301,7 @@ var (
 		},
 		{
 			baseDN:       opsBaseDN,
+			scope:        ldap.ScopeWholeSubtree,
 			searchFilter: objectClass(monitorOperation),
 			searchAttr:   monitorOpCompleted,
 			metric:       monitorOperationGauge,
@@ -376,6 +381,7 @@ func (s *Scraper) addReplicationQueries() {
 		queries = append(queries,
 			&query{
 				baseDN:       s.Sync,
+				scope:        ldap.ScopeBaseObject,
 				searchFilter: "(contextCSN=*)",
 				searchAttr:   monitorReplicationFilter,
 				metric:       monitorReplicationGauge,
@@ -498,7 +504,7 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 		}
 
 		req := ldap.NewSearchRequest(
-			s.Sync, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+			s.Sync, ldap.ScopeBaseObject, ldap.NeverDerefAliases, 0, 0, false,
 			"(contextCSN=*)", []string{monitorReplicationFilter}, nil,
 		)
 		sr, err := replica.Search(req)
@@ -549,7 +555,7 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 
 func scrapeQuery(conn *ldap.Conn, q *query) error {
 	req := ldap.NewSearchRequest(
-		q.baseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
+		q.baseDN, q.scope, ldap.NeverDerefAliases, 0, 0, false,
 		q.searchFilter, []string{q.searchAttr}, nil,
 	)
 	sr, err := conn.Search(req)
