@@ -456,7 +456,9 @@ func (s *Scraper) scrape() {
 		return
 	}
 	dialCounter.WithLabelValues("ok").Inc()
-	defer conn.Close()
+	defer func(connection *ldap.Conn) {
+		_ = connection.Close()
+	}(conn)
 
 	if s.User != "" && s.Pass != "" {
 		err = conn.Bind(s.User, s.Pass)
@@ -598,7 +600,7 @@ func showVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	fmt.Fprintln(w, GetVersion())
+	_, _ = fmt.Fprintln(w, GetVersion())
 }
 
 func (s *Server) Start() error {
