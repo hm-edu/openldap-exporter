@@ -19,8 +19,9 @@ import (
 	"github.com/prometheus/exporter-toolkit/web"
 	"github.com/tomcz/gotools/errgroup"
 	"github.com/tomcz/gotools/quiet"
-	"github.com/urfave/cli/v2"
-	"github.com/urfave/cli/v2/altsrc"
+	altsrc "github.com/urfave/cli-altsrc/v3"
+	"github.com/urfave/cli-altsrc/v3/yaml"
+	"github.com/urfave/cli/v3"
 )
 
 const (
@@ -31,7 +32,6 @@ const (
 	interval          = "interval"
 	metrics           = "metrics-path"
 	jsonLog           = "json-log"
-	config            = "config"
 	replicationObject = "replication-object"
 	replicationServer = "replication-server"
 	serverId          = "server-id"
@@ -40,74 +40,77 @@ const (
 var showStop bool
 
 func main() {
+
+	config := "config"
+	sourcer := altsrc.NewStringPtrSourcer(&config)
 	flags := []cli.Flag{
-		altsrc.NewStringFlag(&cli.StringFlag{
+		&cli.StringFlag{
 			Name:    promAddr,
 			Value:   ":9330",
 			Usage:   "Bind address for Prometheus HTTP metrics server",
-			EnvVars: []string{"PROM_ADDR"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(promAddr, sourcer), cli.EnvVar("PROM_ADDR")),
+		},
+		&cli.StringFlag{
 			Name:    metrics,
 			Value:   "/metrics",
 			Usage:   "Path on which to expose Prometheus metrics",
-			EnvVars: []string{"METRICS_PATH"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(metrics, sourcer), cli.EnvVar("METRICS_PATH")),
+		},
+		&cli.StringFlag{
 			Name:    ldapAddr,
 			Value:   "localhost:389",
 			Usage:   "Address and port of OpenLDAP server",
-			EnvVars: []string{"LDAP_ADDR"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(ldapAddr, sourcer), cli.EnvVar("LDAP_ADDR")),
+		},
+		&cli.StringFlag{
 			Name:    ldapUser,
 			Usage:   "OpenLDAP bind username (optional)",
-			EnvVars: []string{"LDAP_USER"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(ldapUser, sourcer), cli.EnvVar("LDAP_USER")),
+		},
+		&cli.StringFlag{
 			Name:    ldapPass,
 			Usage:   "OpenLDAP bind password (optional)",
-			EnvVars: []string{"LDAP_PASS"},
-		}),
-		altsrc.NewDurationFlag(&cli.DurationFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(ldapPass, sourcer), cli.EnvVar("LDAP_PASS")),
+		},
+		&cli.DurationFlag{
 			Name:    interval,
 			Value:   30 * time.Second,
 			Usage:   "Scrape interval",
-			EnvVars: []string{"INTERVAL"},
-		}),
-		altsrc.NewBoolFlag(&cli.BoolFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(interval, sourcer), cli.EnvVar("INTERVAL")),
+		},
+		&cli.BoolFlag{
 			Name:    jsonLog,
 			Value:   false,
 			Usage:   "Output logs in JSON format",
-			EnvVars: []string{"JSON_LOG"},
-		}),
-		altsrc.NewStringFlag(&cli.StringFlag{
+			Sources: cli.NewValueSourceChain(yaml.YAML(jsonLog, sourcer), cli.EnvVar("JSON_LOG")),
+		},
+		&cli.StringFlag{
 			Name:  replicationObject,
 			Usage: "Object to watch replication upon",
-		}),
-		altsrc.NewStringSliceFlag(&cli.StringSliceFlag{
+		},
+		&cli.StringSliceFlag{
 			Name:  replicationServer,
 			Usage: "The replication servers to watch",
-		}),
-		altsrc.NewIntFlag(&cli.IntFlag{
+		},
+		&cli.IntFlag{
 			Name:  serverId,
 			Usage: "The id of the server to watch",
-		}),
+		},
 		&cli.StringFlag{
-			Name:  config,
-			Usage: "Optional configuration from a `YAML_FILE`",
+			Name:        config,
+			Destination: &config,
+			Usage:       "Optional configuration from a `YAML_FILE`",
 		},
 	}
-	app := &cli.App{
+	app := &cli.Command{
 		Name:            "openldap_exporter",
 		Usage:           "Export OpenLDAP metrics to Prometheus",
-		Before:          altsrc.InitInputSourceWithContext(flags, optionalYamlSourceFunc(config)),
 		Version:         GetVersion(),
 		HideHelpCommand: true,
 		Flags:           flags,
 		Action:          runMain,
 	}
-	if err := app.Run(os.Args); err != nil {
+	if err := app.Run(context.Background(), os.Args); err != nil {
 		log.Error("service failed", "err", err)
 		os.Exit(1)
 	}
@@ -116,17 +119,7 @@ func main() {
 	}
 }
 
-func optionalYamlSourceFunc(flagFileName string) func(context *cli.Context) (altsrc.InputSourceContext, error) {
-	return func(c *cli.Context) (altsrc.InputSourceContext, error) {
-		filePath := c.String(flagFileName)
-		if filePath != "" {
-			return altsrc.NewYamlSourceFromFile(filePath)
-		}
-		return &altsrc.MapInputSource{}, nil
-	}
-}
-
-func runMain(c *cli.Context) error {
+func runMain(ctx context.Context, c *cli.Command) error {
 	showStop = true
 
 	if c.Bool(jsonLog) {
@@ -354,7 +347,7 @@ type Scraper struct {
 	Tick              time.Duration
 	log               *log.Logger
 	Sync              string
-	ServerId          int
+	ServerId          int64
 	ReplicatonServers []string
 }
 
@@ -438,7 +431,7 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 			q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
 			q.metric.WithLabelValues(sid, "count").Set(count)
 			q.metric.WithLabelValues(sid, "mod").Set(mod)
-			if len(replica) != 0 && s.ServerId == sidNo {
+			if len(replica) != 0 && s.ServerId == int64(sidNo) {
 				for _, rep := range replica {
 					delta := gt.Sub(rep.Time).Seconds()
 					monitorReplicationDeltaGauge.WithLabelValues(rep.Server).Set(delta)
@@ -539,7 +532,7 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 					ll.Warn("unexpected sid value", "err", err)
 					continue
 				}
-				if sid == s.ServerId {
+				if int64(sid) == s.ServerId {
 					replicaStatus = append(replicaStatus, ReplicaStatus{Time: gt, Server: server})
 					break
 				}
