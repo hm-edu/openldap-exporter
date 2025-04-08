@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	github.com/go-ldap/ldap/v3 v3.4.10
-	github.com/prometheus/client_golang v1.21.1
+	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/exporter-toolkit v0.14.0
 	github.com/tomcz/gotools v0.12.0
 	github.com/urfave/cli-altsrc/v3 v3.0.0-alpha2.0.20250405003059-a0ef2d673f03
