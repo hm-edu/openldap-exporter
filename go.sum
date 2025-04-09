@@ -85,6 +85,8 @@ github.com/urfave/cli-altsrc/v3 v3.0.0-alpha2.0.20250228131929-8cc6e0481655 h1:h
 github.com/urfave/cli-altsrc/v3 v3.0.0-alpha2.0.20250228131929-8cc6e0481655/go.mod h1:xwYmypA98PqRCPRltmf6+BeYQ4+fq8s7Lai2u0x8qdo=
 github.com/urfave/cli-altsrc/v3 v3.0.0-alpha2.0.20250405003059-a0ef2d673f03 h1:JxuNS8TZbM0zWMB2MwhDKYecdnkxv5o6DZIx7SEpWNw=
 github.com/urfave/cli-altsrc/v3 v3.0.0-alpha2.0.20250405003059-a0ef2d673f03/go.mod h1:xwYmypA98PqRCPRltmf6+BeYQ4+fq8s7Lai2u0x8qdo=
+github.com/urfave/cli-altsrc/v3 v3.0.1 h1:v+gHk59syLk8ao9rYybZs43+D5ut/gzj0omqQ1XYl8k=
+github.com/urfave/cli-altsrc/v3 v3.0.1/go.mod h1:8UtsKKcxFVzvaoySFPfvQOk413T+IXJhaCWyyoPW3yM=
 github.com/urfave/cli/v3 v3.1.1 h1:bNnl8pFI5dxPOjeONvFCDFoECLQsceDG4ejahs4Jtxk=
 github.com/urfave/cli/v3 v3.1.1/go.mod h1:FJSKtM/9AiiTOJL4fJ6TbMUkxBXn7GO9guZqoZtpYpo=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
