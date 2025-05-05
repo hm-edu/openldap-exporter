@@ -347,7 +347,7 @@ type Scraper struct {
 	Tick              time.Duration
 	log               *log.Logger
 	Sync              string
-	ServerId          int64
+	ServerId          int
 	ReplicatonServers []string
 }
 
@@ -431,7 +431,7 @@ func (s *Scraper) setReplicationValue(entries []*ldap.Entry, q *query) {
 			q.metric.WithLabelValues(sid, "gt").Set(float64(gt.Unix()))
 			q.metric.WithLabelValues(sid, "count").Set(count)
 			q.metric.WithLabelValues(sid, "mod").Set(mod)
-			if len(replica) != 0 && s.ServerId == int64(sidNo) {
+			if len(replica) != 0 && s.ServerId == sidNo {
 				for _, rep := range replica {
 					delta := gt.Sub(rep.Time).Seconds()
 					monitorReplicationDeltaGauge.WithLabelValues(rep.Server).Set(delta)
@@ -534,7 +534,7 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 					ll.Warn("unexpected sid value", "err", err)
 					continue
 				}
-				if int64(sid) == s.ServerId {
+				if sid == s.ServerId {
 					replicaStatus = append(replicaStatus, ReplicaStatus{Time: gt, Server: server})
 					break
 				}
