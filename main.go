@@ -488,6 +488,12 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 			dialCounter.WithLabelValues("fail").Inc()
 			continue
 		}
+		defer func(connection *ldap.Conn) {
+			err = connection.Close()
+			if err != nil {
+				s.log.Error("close failed", "err", err)
+			}
+		}(replica)
 		if s.User != "" && s.Pass != "" {
 			err = replica.Bind(s.User, s.Pass)
 			if err != nil {
