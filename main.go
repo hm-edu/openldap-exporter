@@ -192,6 +192,13 @@ const (
 	monitorReplicationFilter = "contextCSN"
 	monitorReplication       = "monitorReplication"
 	monitorReplicationDelta  = "monitorReplicationDelta"
+
+	// Properties for MDB monitoring
+	dbBaseDN          = "cn=Databases,cn=Monitor"
+	monitoredDatabase = "olmMDBDatabase"
+	mdbFreePages      = "olmMDBPagesFree"
+	mdbUsedPages      = "olmMDBPagesUsed"
+	mdbMaxPages       = "olmMDBPagesMax"
 )
 
 type query struct {
@@ -268,6 +275,30 @@ var (
 		},
 		[]string{"replica"},
 	)
+	pagesFreeGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "openldap",
+			Name:      "pages_free",
+			Help:      help(baseDN, objectClass(monitoredDatabase), mdbFreePages),
+		},
+		[]string{"context"},
+	)
+	pagesUsedGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "openldap",
+			Name:      "pages_used",
+			Help:      help(baseDN, objectClass(monitoredDatabase), mdbUsedPages),
+		},
+		[]string{"context"},
+	)
+	pagesMaxGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Subsystem: "openldap",
+			Name:      "pages_max",
+			Help:      help(baseDN, objectClass(monitoredDatabase), mdbMaxPages),
+		},
+		[]string{"context"},
+	)
 	queries = []*query{
 		{
 			baseDN:       baseDN,
@@ -300,6 +331,30 @@ var (
 			metric:       monitorOperationGauge,
 			setData:      setValue,
 		},
+		{
+			baseDN:       dbBaseDN,
+			scope:        ldap.ScopeWholeSubtree,
+			searchFilter: objectClass(monitoredDatabase),
+			searchAttr:   mdbFreePages,
+			metric:       pagesFreeGauge,
+			setData:      setValueDb,
+		},
+		{
+			baseDN:       dbBaseDN,
+			scope:        ldap.ScopeWholeSubtree,
+			searchFilter: objectClass(monitoredDatabase),
+			searchAttr:   mdbUsedPages,
+			metric:       pagesUsedGauge,
+			setData:      setValueDb,
+		},
+		{
+			baseDN:       dbBaseDN,
+			scope:        ldap.ScopeWholeSubtree,
+			searchFilter: objectClass(monitoredDatabase),
+			searchAttr:   mdbMaxPages,
+			metric:       pagesMaxGauge,
+			setData:      setValueDb,
+		},
 	}
 )
 
@@ -310,6 +365,9 @@ func init() {
 		monitorOperationGauge,
 		monitorReplicationGauge,
 		monitorReplicationDeltaGauge,
+		pagesFreeGauge,
+		pagesUsedGauge,
+		pagesMaxGauge,
 		scrapeCounter,
 		bindCounter,
 		dialCounter,
@@ -322,6 +380,22 @@ func help(msg ...string) string {
 
 func objectClass(name string) string {
 	return fmt.Sprintf("(objectClass=%v)", name)
+}
+
+func setValueDb(entries []*ldap.Entry, q *query) {
+	for _, entry := range entries {
+		val := entry.GetAttributeValue(q.searchAttr)
+		if val == "" {
+			// not every entry will have this attribute
+			continue
+		}
+		num, err := strconv.ParseFloat(val, 64)
+		if err != nil {
+			// some of these attributes are not numbers
+			continue
+		}
+		q.metric.WithLabelValues(entry.GetAttributeValue("namingContexts")).Set(num)
+	}
 }
 
 func setValue(entries []*ldap.Entry, q *query) {
