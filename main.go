@@ -202,12 +202,13 @@ const (
 )
 
 type query struct {
-	baseDN       string
-	scope        int
-	searchFilter string
-	searchAttr   string
-	metric       *prometheus.GaugeVec
-	setData      func([]*ldap.Entry, *query)
+	baseDN         string
+	scope          int
+	searchFilter   string
+	searchAttr     string
+	additionalAttr []string
+	metric         *prometheus.GaugeVec
+	setData        func([]*ldap.Entry, *query)
 }
 
 var (
@@ -332,28 +333,31 @@ var (
 			setData:      setValue,
 		},
 		{
-			baseDN:       dbBaseDN,
-			scope:        ldap.ScopeWholeSubtree,
-			searchFilter: objectClass(monitoredDatabase),
-			searchAttr:   mdbFreePages,
-			metric:       pagesFreeGauge,
-			setData:      setValueDb,
+			baseDN:         dbBaseDN,
+			scope:          ldap.ScopeWholeSubtree,
+			searchFilter:   objectClass(monitoredDatabase),
+			searchAttr:     mdbFreePages,
+			additionalAttr: []string{"namingContexts"},
+			metric:         pagesFreeGauge,
+			setData:        setValueDb,
 		},
 		{
-			baseDN:       dbBaseDN,
-			scope:        ldap.ScopeWholeSubtree,
-			searchFilter: objectClass(monitoredDatabase),
-			searchAttr:   mdbUsedPages,
-			metric:       pagesUsedGauge,
-			setData:      setValueDb,
+			baseDN:         dbBaseDN,
+			scope:          ldap.ScopeWholeSubtree,
+			searchFilter:   objectClass(monitoredDatabase),
+			searchAttr:     mdbUsedPages,
+			additionalAttr: []string{"namingContexts"},
+			metric:         pagesUsedGauge,
+			setData:        setValueDb,
 		},
 		{
-			baseDN:       dbBaseDN,
-			scope:        ldap.ScopeWholeSubtree,
-			searchFilter: objectClass(monitoredDatabase),
-			searchAttr:   mdbMaxPages,
-			metric:       pagesMaxGauge,
-			setData:      setValueDb,
+			baseDN:         dbBaseDN,
+			scope:          ldap.ScopeWholeSubtree,
+			searchFilter:   objectClass(monitoredDatabase),
+			searchAttr:     mdbMaxPages,
+			additionalAttr: []string{"namingContexts"},
+			metric:         pagesMaxGauge,
+			setData:        setValueDb,
 		},
 	}
 )
@@ -631,7 +635,7 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 func scrapeQuery(conn *ldap.Conn, q *query) error {
 	req := ldap.NewSearchRequest(
 		q.baseDN, q.scope, ldap.NeverDerefAliases, 0, 0, false,
-		q.searchFilter, []string{q.searchAttr}, nil,
+		q.searchFilter, append([]string{q.searchAttr}, q.additionalAttr...), nil,
 	)
 	sr, err := conn.Search(req)
 	if err != nil {
