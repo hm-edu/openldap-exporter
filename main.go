@@ -527,9 +527,6 @@ func (s *Scraper) scrape() {
 		return
 	}
 	dialCounter.WithLabelValues("ok").Inc()
-	defer func(connection *ldap.Conn) {
-		_ = connection.Close()
-	}(conn)
 
 	if s.User != "" && s.Pass != "" {
 		err = conn.Bind(s.User, s.Pass)
@@ -547,6 +544,14 @@ func (s *Scraper) scrape() {
 			s.log.Warn("query failed", "filter", q.searchFilter, "err", err)
 			scrapeRes = "fail"
 		}
+	}
+	err = conn.Unbind()
+	if err != nil {
+		s.log.Error("unbind failed", "err", err)
+	}
+	err = conn.Close()
+	if err != nil {
+		s.log.Error("close failed", "err", err)
 	}
 	scrapeCounter.WithLabelValues(scrapeRes).Inc()
 }
@@ -566,12 +571,6 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 			dialCounter.WithLabelValues("fail").Inc()
 			continue
 		}
-		defer func(connection *ldap.Conn) {
-			err = connection.Close()
-			if err != nil {
-				s.log.Error("close failed", "err", err)
-			}
-		}(replica)
 		if s.User != "" && s.Pass != "" {
 			err = replica.Bind(s.User, s.Pass)
 			if err != nil {
@@ -623,6 +622,10 @@ func (s *Scraper) scrapeReplication() []ReplicaStatus {
 					break
 				}
 			}
+		}
+		err = replica.Unbind()
+		if err != nil {
+			s.log.Error("unbind failed", "err", err)
 		}
 		err = replica.Close()
 		if err != nil {
