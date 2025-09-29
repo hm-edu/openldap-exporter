@@ -58,7 +58,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:    ldapAddr,
-			Value:   "localhost:389",
+			Value:   "ldap://localhost:389",
 			Usage:   "Address and port of OpenLDAP server",
 			Sources: cli.NewValueSourceChain(yaml.YAML(ldapAddr, sourcer), cli.EnvVar("LDAP_ADDR")),
 		},
