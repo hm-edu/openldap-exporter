@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.25.1
 
 require (
-	github.com/go-ldap/ldap/v3 v3.4.11
+	github.com/go-ldap/ldap/v3 v3.4.12
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/exporter-toolkit v0.14.1
 	github.com/tomcz/gotools v0.12.0
