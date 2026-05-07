@@ -2,7 +2,7 @@ module github.com/hm-edu/openldap-exporter/v2
 
 go 1.26
 
-toolchain go1.26.2
+toolchain go1.26.3
 
 require (
 	github.com/go-ldap/ldap/v3 v3.4.13
