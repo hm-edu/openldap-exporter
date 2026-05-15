@@ -8,6 +8,7 @@ jobs:
     name: Create Weekly Release
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
     steps:
 
@@ -31,3 +32,4 @@ jobs:
         PATCH=$(echo "$LATEST" | sed 's/^v//' | cut -d. -f3)
         TAG="v${MAJOR}.${MINOR}.$((PATCH + 1))"
         gh release create "$TAG" --title "$TAG" --generate-notes
+        gh workflow run release.yml --ref "$TAG"
