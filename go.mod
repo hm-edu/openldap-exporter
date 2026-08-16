@@ -10,7 +10,7 @@ require (
 	github.com/prometheus/exporter-toolkit v0.17.1
 	github.com/tomcz/gotools v0.19.3
 	github.com/urfave/cli-altsrc/v3 v3.1.0
-	github.com/urfave/cli/v3 v3.10.1
+	github.com/urfave/cli/v3 v3.11.0
 )
 
 require (
