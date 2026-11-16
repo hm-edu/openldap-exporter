@@ -1,6 +1,6 @@
 module github.com/hm-edu/openldap-exporter/v2
 
-go 1.26.0
+go 1.27
 
 toolchain go1.27.4
 
@@ -8,7 +8,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/exporter-toolkit v0.20.0
-	github.com/tomcz/gotools v0.19.7
+	github.com/tomcz/gotools v0.19.9
 	github.com/urfave/cli-altsrc/v3 v3.1.0
 	github.com/urfave/cli/v3 v3.14.0
 )
