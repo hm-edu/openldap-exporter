@@ -8,7 +8,7 @@ require (
 	github.com/go-ldap/ldap/v3 v3.4.15
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/exporter-toolkit v0.20.0
-	github.com/tomcz/gotools v0.20.1
+	github.com/tomcz/gotools v0.20.2
 	github.com/urfave/cli-altsrc/v3 v3.1.0
 	github.com/urfave/cli/v3 v3.14.0
 )
