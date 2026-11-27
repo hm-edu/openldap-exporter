@@ -54,8 +54,8 @@ github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0o
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
 github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWDWE=
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
-github.com/tomcz/gotools v0.21.2 h1:AylgRwboFjylVlwsNSxkdZ1lmfiJ2m9uXahC/iFgHUA=
-github.com/tomcz/gotools v0.21.2/go.mod h1:Z5aeZ/bsUGEf2XBxiXdXgrzmzB3ICiXvCfHGscjp5tw=
+github.com/tomcz/gotools v0.21.3 h1:N48ucZbA9CpGONW2IP02dHjyupVIz0eoWniHQg/YqRA=
+github.com/tomcz/gotools v0.21.3/go.mod h1:7cZ2d5NyxLLUa2bL6a8kBaymB5Rw1jiWOKYDPugHyNo=
 github.com/urfave/cli-altsrc/v3 v3.1.0 h1:6E5+kXeAWmRxXlPgdEVf9VqVoTJ2MJci0UMpUi/w/bA=
 github.com/urfave/cli-altsrc/v3 v3.1.0/go.mod h1:VcWVTGXcL3nrXUDJZagHAeUX702La3PKeWav7KpISqA=
 github.com/urfave/cli/v3 v3.14.0 h1:a8414NQlHJs0c/iBsulKLzlES0n/lEAskbL2LKpU4/s=
